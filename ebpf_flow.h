@@ -30,6 +30,8 @@
 #include <linux/if.h>
 #endif
 #include <string.h>
+#include <string>
+#include <vector>
 
 #define ktime_t u_int64_t
 #define u8 u_int8_t
@@ -61,6 +63,7 @@ typedef enum {
   LIBEBPF_OUTCOMING = 1 << 3,
   LIBEBPF_TCP_CLOSE = 1 << 4,
   LIBEBPF_TCP_RETR  = 1 << 5,
+  LIBEBPF_SYSCALL   = 1 << 6, 
 } libebpflow_flag;
 
 /* ******************************************* */
@@ -82,7 +85,7 @@ extern "C" {
    */
   void* init_ebpf_flow(void *priv_ptr, eBPFHandler ebpfHandler,
 		       ebpfRetCode *rc,
-		       u_int16_t flags /* default 0 to capture all events */);
+		       u_int16_t flags /* default 0 to capture all events */, std::vector<std::string>* syscalls);
 
   /*
    * term_ebpf_flow - Cleans the resources used by the library

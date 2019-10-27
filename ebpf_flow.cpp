@@ -33,8 +33,12 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <linux/version.h>
+#include <vector>
+#include <string>
 
 #include "ebpflow.ebpf.enc"
+
+#define DEBUG 1
 
 static ContainerInfo cinfo;
 
@@ -115,7 +119,7 @@ static int attachEBPFKernelProbe(ebpf::BPF *bpf, const char *queue_name,
 
 extern "C" {
   void* init_ebpf_flow(void *priv_ptr, eBPFHandler ebpfHandler,
-		       ebpfRetCode *rc, u_int16_t flags) {
+		       ebpfRetCode *rc, u_int16_t flags, std::vector<std::string>* syscalls) {
     ebpf::BPF *bpf = NULL;
     std::string code = b64decode(ebpf_code, strlen(ebpf_code));
     ebpf::StatusTuple open_res(0);
@@ -139,7 +143,7 @@ extern "C" {
       *rc = ebpf_initialization_failed;
       goto init_failed;
     }
-
+    
     // attaching probes ----- //
     if((flags & LIBEBPF_TCP) && (flags & LIBEBPF_OUTCOMING)) {
       if(attachEBPFKernelProbe(bpf,"tcp_v4_connect",
@@ -193,6 +197,19 @@ extern "C" {
 			       "trace_tcp_retransmit_skb", BPF_PROBE_ENTRY)) {
 	*rc = ebpf_kprobe_attach_error;
 	goto init_failed;
+      }
+    }
+  
+    if(!syscalls->empty()) {
+      std::vector<std::string>::iterator it;
+      for (it=syscalls->begin(); it!=syscalls->end(); it++) {
+        std::cout << *it << std::endl;
+        std::string syscall_name = bpf->get_syscall_fnname(*it);
+        if(attachEBPFKernelProbe(bpf, syscall_name.c_str(), 
+              "trace_syscall", BPF_PROBE_ENTRY)) {
+          *rc = ebpf_kprobe_attach_error;
+          goto init_failed;
+        }
       }
     }
 

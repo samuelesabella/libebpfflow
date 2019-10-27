@@ -40,6 +40,7 @@ typedef enum {
   eUDP_SEND = 211,
   eTCP_CLOSE = 300,
   eTCP_CONN_FAIL = 500,
+  eSYSCALL = 7,
 } event_type;
 
 struct taskInfo {

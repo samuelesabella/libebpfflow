@@ -583,3 +583,27 @@ int trace_receive_v4(struct pt_regs *ctx, struct sock *sk) {
 
   return(0);
 }
+
+
+/* ******************************************* */
+/* SYSCAL  */
+/* ******************************************* */
+static int fill_syscall(struct pt_regs *ctx, eBPFevent *ev) {
+  u32 pid    = bpf_get_current_pid_tgid() & 0xFFFFFFFF;
+  ktime_t kt = { bpf_ktime_get_ns() };
+
+  bpf_get_current_comm(&ev->proc.task, sizeof(ev->proc.task));
+  fill_task_info((char*)ev->container_id, &ev->proc, &ev->father);
+  ev->ktime = kt;
+  return(0);
+}
+
+int trace_syscall(struct pt_regs *ctx) {
+  eBPFevent event = { .etype = eSYSCALL };
+  
+  fill_syscall(ctx, &event);  
+  ebpf_events.perf_submit(ctx, &event, sizeof(eBPFevent));
+
+  return 0;
+}
+

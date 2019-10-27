@@ -42,6 +42,7 @@
 #include <sys/types.h>
 #include <pwd.h>
 #include <grp.h>
+#include <vector>
 
 #include "ebpf_flow.h"
 
@@ -87,10 +88,12 @@ int main(int argc, char **argv) {
   ebpfRetCode rc = ebpf_no_error;
   eBPFHandler handler = ebpfHandler;
 
+  std::vector<std::string> syscalls({"execve", "openat"}); // { "execve", "openat" }; // "vfs_read" 
+
   signal(SIGINT, handleTermination);
 
   // Argument Parsing ----- //
-  while ((ch = getopt_long(argc, argv, "z:rcutiohv", long_opts, NULL)) != EOF) {
+  while ((ch = getopt_long(argc, argv, "z:rcutsiohv", long_opts, NULL)) != EOF) {
     switch (ch) {
     case 'u':
       flags |= LIBEBPF_UDP;
@@ -110,6 +113,10 @@ int main(int argc, char **argv) {
     case 'r':
       flags |= LIBEBPF_TCP_RETR;
       break;
+    case 's':
+      flags |= LIBEBPF_SYSCALL;
+      // TODO: parse syscall list
+      break;
     case 'z':
       zmq_endpoint = strdup(optarg);
       handler = zmqHandler;
@@ -126,11 +133,11 @@ int main(int argc, char **argv) {
   if(flags == 0)
     flags = 0xffff;
 
-  if(!(flags & LIBEBPF_INCOMING) && !(flags & LIBEBPF_OUTCOMING))
+  if(!(flags & LIBEBPF_INCOMING) && !(flags & LIBEBPF_OUTCOMING) && !(flags & LIBEBPF_SYSCALL)) 
     flags += LIBEBPF_INCOMING | LIBEBPF_OUTCOMING;
 
   if(!(flags & LIBEBPF_TCP) && !(flags & LIBEBPF_UDP)
-     && !(flags & LIBEBPF_TCP_CLOSE) && !(flags & eTCP_RETR))
+     && !(flags & LIBEBPF_TCP_CLOSE) && !(flags & eTCP_RETR) && !(flags & LIBEBPF_SYSCALL))
     flags += (LIBEBPF_UDP | LIBEBPF_TCP) | LIBEBPF_TCP_CLOSE;
 
   // Checking root ----- //
@@ -177,7 +184,7 @@ int main(int argc, char **argv) {
 	 "Legacy API"
 #endif
 	 );
-  ebpf = init_ebpf_flow(NULL, handler, &rc, flags);
+  ebpf = init_ebpf_flow(NULL, handler, &rc, flags, &syscalls);
   
   if(!ebpf) {
     printf("Unable to initialize libebpfflow: %s\n", ebpf_print_error(rc));
@@ -195,7 +202,7 @@ int main(int argc, char **argv) {
  close:
   if(gZMQsocket != NULL)
     zmq_close(gZMQsocket);
-  if(context != NULL) 
+  if(context != NULL)  
     zmq_ctx_destroy(context);
   if(zmq_endpoint)
     free(zmq_endpoint);
@@ -295,6 +302,9 @@ const char* event_summary(eBPFevent* e) {
   case eUDP_RECV:
     return("RECV");
     break;
+  case eSYSCALL:
+    return("SYSCALL");
+    break;
   }
 
   return("???");
@@ -339,7 +349,7 @@ static void ebpfHandler(void* t_bpfctx, void* t_data, int t_datasize) {
 
   printf("%u.%06u ", (unsigned int)event.event_time.tv_sec, (unsigned int)event.event_time.tv_usec);
 
-  printf("[%s][%s][IPv4/%s][pid/tid: %u/%u [%s], uid/gid: %u/%u][father pid/tid: %u/%u [%s], uid/gid: %u/%u]",
+  printf("[%s][%s][IPv4/%s][pid/tid: %u/%u [%s], uid/gid: %u/%u][father pid/tid: %u/%u [%s], uid/gid: %u/%u][%s]",
 	 event.ifname, event.sent_packet ? "Sent" : "Rcvd",
 	 (event.proto == IPPROTO_TCP) ? "TCP" : "UDP",
 	 event.proc.pid, event.proc.tid,
@@ -347,18 +357,19 @@ static void ebpfHandler(void* t_bpfctx, void* t_data, int t_datasize) {
 	 event.proc.uid, event.proc.gid,
 	 event.father.pid, event.father.tid,
 	 (event.father.full_task_path == NULL) ? event.father.task : event.father.full_task_path,
-	 event.father.uid, event.father.gid);
+	 event.father.uid, event.father.gid, event_summary(&event));
+  
+  if (event.etype != 7) /* otherwise syscall */ {
+    if(event.ip_version == 4)
+      IPV4Handler(t_bpfctx, &event, &event.addr.v4);
+    else
+      IPV6Handler(t_bpfctx, &event, &event.addr.v6);
 
-  if(event.ip_version == 4)
-    IPV4Handler(t_bpfctx, &event, &event.addr.v4);
-  else
-    IPV6Handler(t_bpfctx, &event, &event.addr.v6);
-
-  if(event.proto == IPPROTO_TCP) {
-    printf("[%s]", event_summary(&event));
-    
-    if(event.etype == eTCP_CONN)
-      printf("[latency: %.2f msec]", ((float)event.latency_usec)/(float)1000);
+    if(event.proto == IPPROTO_TCP) {
+      
+      if(event.etype == eTCP_CONN)
+        printf("[latency: %.2f msec]", ((float)event.latency_usec)/(float)1000);
+    }
   }
   
   // Container ----- /'/
