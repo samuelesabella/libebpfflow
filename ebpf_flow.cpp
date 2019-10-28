@@ -123,6 +123,7 @@ extern "C" {
   void* init_ebpf_flow(void *priv_ptr, eBPFHandler ebpfHandler,
 		       ebpfRetCode *rc, u_int16_t flags, std::vector<std::string>* syscalls) {
     ebpf::BPF *bpf = NULL;
+    symcache = NULL;
     std::string code = b64decode(ebpf_code, strlen(ebpf_code));
     ebpf::StatusTuple open_res(0);
 
@@ -206,7 +207,6 @@ extern "C" {
       std::vector<std::string>::iterator it;
       for (it=syscalls->begin(); it!=syscalls->end(); it++) {
         std::string syscall_name = bpf->get_syscall_fnname(*it);
-        printf("Attaching probe to %s \n", syscall_name.c_str());
         if(attachEBPFKernelProbe(bpf, syscall_name.c_str(), 
               "trace_syscall", BPF_PROBE_ENTRY)) {
           *rc = ebpf_kprobe_attach_error;

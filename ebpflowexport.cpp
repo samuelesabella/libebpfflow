@@ -77,23 +77,25 @@ static const struct option long_opts[] = {
   { "help",     0, NULL, 'h' },
   { "zmq",      0, NULL, 'z' },
   { "verbose",  0, NULL, 'v' },
+  { "syscall",  0, NULL, 'v' },
   { NULL,       0, NULL,  0  }
 };
 
 int main(int argc, char **argv) {
   int ch;
   char* zmq_endpoint = NULL;
-  void *context, *ebpf = NULL;
+  void *context = NULL; 
+  void *ebpf = NULL;
   short flags = 0;
   ebpfRetCode rc = ebpf_no_error;
   eBPFHandler handler = ebpfHandler;
 
-  std::vector<std::string> syscalls({"execve", "openat"}); // { "execve", "openat" }; // "vfs_read" 
+  std::vector<std::string> syscalls; // ({"execve", "openat"});
 
   signal(SIGINT, handleTermination);
 
   // Argument Parsing ----- //
-  while ((ch = getopt_long(argc, argv, "z:rcutsiohv", long_opts, NULL)) != EOF) {
+  while ((ch = getopt_long(argc, argv, "z:rcuts:iohv", long_opts, NULL)) != EOF) {
     switch (ch) {
     case 'u':
       flags |= LIBEBPF_UDP;
@@ -115,7 +117,15 @@ int main(int argc, char **argv) {
       break;
     case 's':
       flags |= LIBEBPF_SYSCALL;
-      // TODO: parse syscall list
+      { std::string sysargs(optarg);
+      // Removing spaces
+      sysargs.erase(remove_if(sysargs.begin(), sysargs.end(), isspace), sysargs.end());
+      // Tokenizing on commas
+      std::string tmp;     
+      std::stringstream s(sysargs); 
+      while(getline(s, tmp, ',')) { 
+        syscalls.push_back(tmp); 
+      } }
       break;
     case 'z':
       zmq_endpoint = strdup(optarg);
@@ -129,6 +139,7 @@ int main(int argc, char **argv) {
       return 0;
     }
   }
+  
   // Setting defaults
   if(flags == 0)
     flags = 0xffff;
@@ -226,6 +237,7 @@ void help() {
 	 "   -o, --on          Outgoing events (i.e. TCP connect and UDP send)\n"
 	 "   -r, --retr        Retransmissions events\n"
 	 "   -c, --tcpclose    TCP connection refused and socket close \n"
+   "   -s, --syscall     Collect system call events (i.e. /proc/kallsym)"
 	 "   -z, --zmq <port>  Publish JSON events as a ZeroMQ publisher with envelope 'ebpfflow'\n"
 	 "                     Example ebpflowexport -z tcp://127.0.0.1:1234\n\n"
 	 "IMPORTANT: please run this tool as root\n"
