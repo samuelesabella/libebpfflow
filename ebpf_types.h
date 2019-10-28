@@ -66,9 +66,15 @@ struct ipv6_addr_t {
 #define IFNAMSIZ 16
 #endif
 
+#ifndef KSYMNAMESIZ
+#define KSYMNAMESIZ 125
+#endif
+
 typedef struct {
   ktime_t ktime;
+  u64 ksymaddr; // Kernel symbol address
   char ifname[IFNAMSIZ];
+  char *ksymname;
   struct timeval event_time;
   u_int8_t ip_version, sent_packet;
   u16 etype;

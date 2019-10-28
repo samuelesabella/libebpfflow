@@ -36,11 +36,13 @@
 #include <vector>
 #include <string>
 
+#include <bcc/bcc_syms.h>
 #include "ebpflow.ebpf.enc"
 
 #define DEBUG 1
 
 static ContainerInfo cinfo;
+static void* symcache;
 
 /* ******************************************* */
 
@@ -203,8 +205,8 @@ extern "C" {
     if(!syscalls->empty()) {
       std::vector<std::string>::iterator it;
       for (it=syscalls->begin(); it!=syscalls->end(); it++) {
-        std::cout << *it << std::endl;
         std::string syscall_name = bpf->get_syscall_fnname(*it);
+        printf("Attaching probe to %s \n", syscall_name.c_str());
         if(attachEBPFKernelProbe(bpf, syscall_name.c_str(), 
               "trace_syscall", BPF_PROBE_ENTRY)) {
           *rc = ebpf_kprobe_attach_error;
@@ -216,6 +218,9 @@ extern "C" {
     // opening output buffer ----- //
     open_res = bpf->open_perf_buffer("ebpf_events", ebpfHandler, NULL, (void*)priv_ptr);
     if(open_res.code() != 0) { *rc = ebpf_events_open_error; goto init_failed; }
+
+    // Initializing symcache ----- // 
+    symcache = bcc_symcache_new(-1, NULL);
 
     *rc = ebpf_no_error;
     return((void*)bpf);
@@ -278,6 +283,18 @@ extern "C" {
 
   void ebpf_preprocess_event(eBPFevent *event) {
     struct container_info *container_info;
+    
+    // Resolving syscall name
+    event->ksymname = (char*) malloc(KSYMNAMESIZ * sizeof(char));
+    if(event->etype == eSYSCALL) {
+      struct bcc_symbol s;
+      if(bcc_symcache_resolve(symcache, event->ksymaddr, &s) != -1) {
+        strncpy(event->ksymname, s.name, KSYMNAMESIZ);
+      }
+      else {
+        strncpy(event->ksymname, "unknown", KSYMNAMESIZ);
+      }
+    }
 
     gettimeofday(&event->event_time, NULL);
     check_pid(&event->proc), check_pid(&event->father);
@@ -320,6 +337,8 @@ extern "C" {
 
     if(event->father.full_task_path != NULL)
       free(event->father.full_task_path);
+
+    if(event->ksymname != NULL) free(event->ksymname);
 
     if(event->docker.name != NULL)  free(event->docker.name);
     if(event->kube.name != NULL)    free(event->kube.name);

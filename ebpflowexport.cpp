@@ -359,17 +359,19 @@ static void ebpfHandler(void* t_bpfctx, void* t_data, int t_datasize) {
 	 (event.father.full_task_path == NULL) ? event.father.task : event.father.full_task_path,
 	 event.father.uid, event.father.gid, event_summary(&event));
   
-  if (event.etype != 7) /* otherwise syscall */ {
+  if(event.etype != eSYSCALL) {
     if(event.ip_version == 4)
       IPV4Handler(t_bpfctx, &event, &event.addr.v4);
     else
       IPV6Handler(t_bpfctx, &event, &event.addr.v6);
 
     if(event.proto == IPPROTO_TCP) {
-      
       if(event.etype == eTCP_CONN)
         printf("[latency: %.2f msec]", ((float)event.latency_usec)/(float)1000);
     }
+  }
+  else if(event.ksymname[0] != '\0') {
+      printf("[ksym: %s]", event.ksymname);
   }
   
   // Container ----- /'/

@@ -589,7 +589,7 @@ int trace_receive_v4(struct pt_regs *ctx, struct sock *sk) {
 /* SYSCAL  */
 /* ******************************************* */
 static int fill_syscall(struct pt_regs *ctx, eBPFevent *ev) {
-  u32 pid    = bpf_get_current_pid_tgid() & 0xFFFFFFFF;
+  ev->ksymaddr = PT_REGS_IP(ctx);
   ktime_t kt = { bpf_ktime_get_ns() };
 
   bpf_get_current_comm(&ev->proc.task, sizeof(ev->proc.task));
@@ -600,6 +600,8 @@ static int fill_syscall(struct pt_regs *ctx, eBPFevent *ev) {
 
 int trace_syscall(struct pt_regs *ctx) {
   eBPFevent event = { .etype = eSYSCALL };
+ 
+  // TODO: add syscall name
   
   fill_syscall(ctx, &event);  
   ebpf_events.perf_submit(ctx, &event, sizeof(eBPFevent));
