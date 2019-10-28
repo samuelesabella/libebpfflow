@@ -144,7 +144,7 @@ int main(int argc, char **argv) {
   if(flags == 0)
     flags = 0xffff;
 
-  if(!(flags & LIBEBPF_INCOMING) && !(flags & LIBEBPF_OUTCOMING) && !(flags & LIBEBPF_SYSCALL)) 
+  if(!(flags & LIBEBPF_INCOMING) && !(flags & LIBEBPF_OUTCOMING)) 
     flags += LIBEBPF_INCOMING | LIBEBPF_OUTCOMING;
 
   if(!(flags & LIBEBPF_TCP) && !(flags & LIBEBPF_UDP)
